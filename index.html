@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Harmonic Orbit</title>
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Playable Reharm Tool</p>
+          <h1>Harmonic Orbit</h1>
+          <p class="subtitle">Shape how a short loop lands.</p>
+        </div>
+        <div class="global-controls">
+          <button id="save-session-button" class="ghost-button">Save Session</button>
+          <button id="restore-session-button" class="ghost-button">Restore Last</button>
+          <button id="clear-session-button" class="ghost-button">Clear Saved</button>
+          <button id="export-session-button" class="ghost-button">Export JSON</button>
+          <button id="import-session-button" class="ghost-button">Import JSON</button>
+          <input id="import-session-input" type="file" accept="application/json" hidden />
+          <label class="toggle">
+            <span>Loop</span>
+            <input id="loop-toggle" type="checkbox" checked />
+          </label>
+          <label class="toggle">
+            <span>Click</span>
+            <input id="click-toggle" type="checkbox" />
+          </label>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="workspace-card workspace-main">
+          <div class="input-bar">
+            <div class="field-group">
+              <label for="loop-input">Loop</label>
+              <input
+                id="loop-input"
+                type="text"
+                value=""
+                placeholder="Dm7 | G7 | Cmaj7 | A7"
+                autocomplete="off"
+              />
+              <p class="helper-text">2-4 bars. Use spaces to split extra steps inside a bar.</p>
+              <p id="loop-feedback" class="feedback-text">Enter a loop or load the demo.</p>
+              <p id="session-feedback" class="feedback-text info">No saved session loaded.</p>
+            </div>
+            <div class="button-row">
+              <button id="load-demo-button" class="ghost-button">Load Demo</button>
+              <button id="apply-loop-button" class="primary-button">Apply Loop</button>
+            </div>
+          </div>
+
+          <div class="workspace-grid">
+            <section class="orbit-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="panel-kicker">Orbit Loop</p>
+                  <h2>Landing Path</h2>
+                </div>
+                <div class="mini-status">
+                  <span id="loop-status-pill" class="pill">Empty</span>
+                  <span id="playback-status-pill" class="pill muted">Stopped</span>
+                </div>
+              </div>
+
+              <div class="orbit-frame">
+                <svg id="orbit-svg" viewBox="0 0 640 640" role="img" aria-label="Harmonic Orbit workspace">
+                  <defs>
+                    <linearGradient id="orbit-stroke" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#f4c56b"></stop>
+                      <stop offset="100%" stop-color="#7d9e91"></stop>
+                    </linearGradient>
+                    <filter id="soft-glow">
+                      <feGaussianBlur stdDeviation="6" result="blur"></feGaussianBlur>
+                      <feMerge>
+                        <feMergeNode in="blur"></feMergeNode>
+                        <feMergeNode in="SourceGraphic"></feMergeNode>
+                      </feMerge>
+                    </filter>
+                  </defs>
+                  <circle class="orbit-backdrop" cx="320" cy="320" r="210"></circle>
+                  <path id="approach-arc" class="approach-arc hidden"></path>
+                  <circle id="playhead" class="playhead hidden" cx="320" cy="110" r="6"></circle>
+                  <g id="orbit-steps"></g>
+                  <g id="orbit-empty-state">
+                    <circle class="empty-ring" cx="320" cy="320" r="150"></circle>
+                    <text x="320" y="298" class="empty-title">Start with a short loop</text>
+                    <text x="320" y="332" class="empty-copy">Enter 2-4 bars to shape how the music lands</text>
+                  </g>
+                  <g id="orbit-annotations"></g>
+                </svg>
+              </div>
+
+              <div id="step-strip" class="step-strip"></div>
+
+              <div class="orbit-actions">
+                <button id="expand-zone-button" class="ghost-button" disabled>Expand Left</button>
+                <button id="shrink-zone-button" class="ghost-button" disabled>Shrink</button>
+                <button id="exclude-step-button" class="ghost-button" disabled>Exclude Step</button>
+              </div>
+            </section>
+
+            <aside class="inspector-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="panel-kicker">Step Inspector</p>
+                  <h2 id="inspector-title">No step selected</h2>
+                </div>
+                <span id="role-pill" class="pill muted">Role</span>
+              </div>
+
+              <div id="inspector-empty" class="inspector-empty">
+                <p id="inspector-empty-text">Load a loop, then double-click a step to set the landing point.</p>
+              </div>
+
+              <div id="inspector-content" class="inspector-content hidden">
+                <div class="inspector-meta">
+                  <div>
+                    <span class="meta-label">Step</span>
+                    <strong id="step-label">-</strong>
+                  </div>
+                  <div>
+                    <span class="meta-label">Landing</span>
+                    <strong id="landing-label">-</strong>
+                  </div>
+                </div>
+
+                <div class="tab-strip" id="axis-tabs">
+                  <button class="tab-button active" data-axis="Color">Color</button>
+                  <button class="tab-button" data-axis="Pull">Pull</button>
+                  <button class="tab-button" data-axis="Link">Link</button>
+                </div>
+
+                <div class="candidate-section">
+                  <div class="candidate-head">
+                    <h3>Candidates</h3>
+                    <p id="axis-helper">Preview before applying.</p>
+                  </div>
+                  <div id="candidate-list" class="candidate-list"></div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="workspace-card dock-card">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">Mirror Dock</p>
+              <h2>Compare Paths</h2>
+            </div>
+            <button id="new-mirror-button" class="primary-button" disabled>+ New Mirror</button>
+          </div>
+
+          <div id="mirror-list" class="mirror-list">
+            <button class="mirror-chip base-chip active" data-variant-id="base">Base</button>
+            <p id="mirror-empty-copy" class="dock-copy">No mirrors yet.</p>
+          </div>
+
+          <div id="compare-summary" class="compare-summary">
+            <p class="summary-title">Current view</p>
+            <p id="compare-summary-text">Start from a base loop, then store one focused change as a mirror.</p>
+            <p id="compare-provenance-text" class="compare-provenance hidden"></p>
+            <div class="compare-tools">
+              <button id="flash-compare-button" class="ghost-button" disabled>Flash Compare</button>
+              <button id="preview-diff-button" class="ghost-button" disabled>Play Diff</button>
+            </div>
+            <div class="compare-tools secondary-tools">
+              <button id="reset-draft-button" class="ghost-button" disabled>Reset Draft</button>
+              <button id="rename-mirror-button" class="ghost-button" disabled>Rename Mirror</button>
+              <button id="delete-mirror-button" class="ghost-button" disabled>Delete Mirror</button>
+            </div>
+            <div id="diff-summary-list" class="diff-summary-list">
+              <p class="dock-copy">No diff to summarize yet.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="workspace-card transport-card">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">Transport</p>
+              <h2>Listen & Compare</h2>
+            </div>
+            <button id="clear-auditions-button" class="ghost-button" disabled>Clear Unpinned</button>
+          </div>
+          <div class="transport-grid">
+            <button id="play-loop-button" class="primary-button" disabled>Play Loop</button>
+            <button id="solo-zone-button" class="ghost-button" disabled>Solo Zone</button>
+            <button id="bypass-edits-button" class="ghost-button" disabled>Bypass Edits</button>
+            <button id="back-to-base-button" class="ghost-button" disabled>Back to Base</button>
+          </div>
+          <p class="helper-text shortcuts-copy">
+            Shortcuts: Space play, 1/2/3 axis, S solo zone, B back to base, M new mirror, F flash compare, U undo, R redo, X reset draft
+          </p>
+          <div class="audition-memory">
+            <div class="summary-title">Audition Trail</div>
+            <div id="audition-trail" class="audition-trail">
+              <p class="dock-copy">No audition history yet.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="workspace-card snapshots-card">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">Snapshots</p>
+              <h2>History & Checkpoints</h2>
+            </div>
+            <button id="add-snapshot-button" class="primary-button" disabled>+ Snapshot</button>
+          </div>
+
+          <div class="compare-tools">
+            <button id="undo-button" class="ghost-button" disabled>Undo</button>
+            <button id="redo-button" class="ghost-button" disabled>Redo</button>
+          </div>
+
+          <div id="history-feedback" class="feedback-text info">No edits in history yet.</div>
+          <div id="snapshot-list" class="snapshot-list">
+            <p class="dock-copy">No snapshots yet.</p>
+          </div>
+        </section>
+      </main>
+
+      <dialog id="mirror-dialog" class="mirror-dialog">
+        <form method="dialog" class="mirror-form">
+          <p class="panel-kicker">Create Mirror</p>
+          <h2>Create mirror from current version</h2>
+          <p id="mirror-dialog-helper">This mirror can only edit one axis.</p>
+
+          <fieldset class="mirror-axis-group">
+            <legend>Choose axis</legend>
+            <label><input type="radio" name="mirror-axis" value="Color" /> Color</label>
+            <label><input type="radio" name="mirror-axis" value="Timing" /> Timing</label>
+            <label><input type="radio" name="mirror-axis" value="Link" /> Link</label>
+          </fieldset>
+
+          <label class="field-group" for="mirror-name-input">
+            <span>Name this version</span>
+            <input id="mirror-name-input" type="text" value="tritone" />
+          </label>
+
+          <div class="button-row">
+            <button id="cancel-mirror-button" value="cancel" class="ghost-button">Cancel</button>
+            <button id="confirm-mirror-button" value="default" class="primary-button">Create</button>
+          </div>
+        </form>
+      </dialog>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
