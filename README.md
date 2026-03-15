@@ -1,62 +1,59 @@
-# Harmonic Orbit MVP
+# Harmonic Orbit
 
-Static desktop prototype for the `Harmonic Orbit` concept.
+> 当前版本状态：**v0.10-dev**（开发迭代中，未到 v1.0 验收冻结）
 
-## Open It
+一个面向 reharm 练习与对比的静态原型应用（HTML/CSS/JS）。
 
-- Open [index.html](C:\Users\BW\DevPlayground\ProjectMartino\index.html) directly in a browser
-- or serve the folder locally with a simple static server
+## 新人上手（Onboarding）
 
-## Demo Flow
+### 1. 先看什么
+- 产品高层需求：[`PRD.md`](./PRD.md)
+- 已实现历史：[`PROGRESS.md`](./PROGRESS.md)
+- 当前待办：[`TODO.md`](./TODO.md)
 
-1. Click `Load Demo`
-2. Double-click `Cmaj7` in the orbit to set the landing point
-3. Click `G7` inside the highlighted approach zone
-4. Try `Color`, `Pull`, and `Link` candidates
-5. Apply one change
-6. Create a mirror
-7. Compare the mirror against `Base`
+### 2. 本地运行
+你可以直接双击 `index.html` 打开，也可以本地起静态服务：
 
-Input is intentionally loose in this MVP:
+```bash
+python -m http.server 4173 --directory .
+```
 
-- `|` separates bars
-- spaces inside a bar create extra steps
-- example: `Dm7 G7 | Cmaj7 A7`
+然后访问：`http://127.0.0.1:4173/index.html`
 
-## Added MVP Conveniences
+### 3. 推荐首次操作路径（5分钟）
+1. 点击 `Load Demo`
+2. 点击 `Apply Loop`
+3. 在 Orbit 中双击任一步设置 landing
+4. 在 zone 内选 step，试听候选并 `Use This Move`
+5. 创建 mirror 并切换到 compare
+6. 在 Audition Trail 里 pin / note / promote
+7. 试用 `Export Review` 导出当前复盘
 
-- local session save / restore / clear
-- session export / import as JSON
-- named snapshots and lightweight undo / redo
-- compare tools now work on both saved mirrors and unsaved base edits
-- diff summaries include per-step `Play` audition buttons
-- diff summaries now explain `role transition` and `arrival quality`, not just symbol swaps
-- candidate cards now preview role and arrival impact before you apply a change
-- candidate cards now support `Before/After` audition against the current step
-- candidate and diff previews now support `To Landing / Path` cadence-context audition
-- recent auditions are stored in an `Audition Trail` with replay and clear
-- auditions can now be `Pinned`, and `Clear Trail` only removes unpinned items
-- pinned auditions can carry a short `why it worked` note
-- pinned auditions with full context can be promoted directly to a mirror
-- mirrors now show lightweight provenance for draft saves and audition promotions
-- mirror dock now groups nearby versions into lightweight `stacks` by step and axis
-- each mirror stack can now `Cycle Stack` to audition nearby versions in sequence
-- stacks can now carry soft user labels like `backdoor family` or `late settle`
-- stacks can also carry a one-line summary note describing what the family is testing
-- draft cleanup and version management: `Reset Draft`, `Rename Mirror`, `Delete Mirror`, snapshot delete
-- keyboard shortcuts:
-  - `Space`: play or pause
-  - `1 / 2 / 3`: switch `Color / Pull / Link`
-  - `S`: toggle solo zone
-  - `B`: back to base
-  - `M`: open mirror dialog
-  - `F`: flash compare against base
-  - `U`: undo
-  - `R`: redo
-  - `X`: reset current draft back to base
 
-## Files
+## 迭代协作约定（Contributor Quick Rules）
+- 每次迭代结束前：
+  - 更新 `TODO.md` 当前迭代状态；
+  - 将已完成项移动到 `PROGRESS.md`；
+  - 在 `TODO.md` 增加下一版本重大规划（Version Plan）；
+  - 在 `agent.md` 更新完成度评估与是否可停止开发建议。
+- 评估口径与停止阈值：见 [`agent.md`](./agent.md)。
 
-- [index.html](C:\Users\BW\DevPlayground\ProjectMartino\index.html): app structure
-- [app.css](C:\Users\BW\DevPlayground\ProjectMartino\app.css): visual system and layout
-- [app.js](C:\Users\BW\DevPlayground\ProjectMartino\app.js): state, interaction logic, and Web Audio previews
+## 代码结构
+- `index.html`：页面结构与主要控件
+- `app.css`：视觉系统与布局样式
+- `app.js`：状态管理、交互逻辑、WebAudio 试听
+- `PRD.md`：高层功能需求
+- `PROGRESS.md`：历史完成项
+- `TODO.md`：待办事项（仅 pending）
+
+## 常用验证
+```bash
+# JS 语法检查
+node --check app.js
+
+# 生成跨浏览器 smoke 检查模板
+./scripts/smoke_checklist.sh
+```
+
+## 备注
+- 当前为静态原型，优先验证交互与流程，不追求工程化最终形态。

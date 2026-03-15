@@ -13,8 +13,10 @@
           <p class="eyebrow">Playable Reharm Tool</p>
           <h1>Harmonic Orbit</h1>
           <p class="subtitle">Shape how a short loop lands.</p>
+          <p id="current-mode-pill" class="mode-pill">Mode: Base</p>
         </div>
         <div class="global-controls">
+          <button id="export-review-button" class="ghost-button">Export Review</button>
           <button id="save-session-button" class="ghost-button">Save Session</button>
           <button id="restore-session-button" class="ghost-button">Restore Last</button>
           <button id="clear-session-button" class="ghost-button">Clear Saved</button>
@@ -31,6 +33,13 @@
           </label>
         </div>
       </header>
+
+      <section id="onboarding-banner" class="onboarding-banner hidden" aria-live="polite">
+        <div>
+          <strong>Quick start:</strong> Load Demo → Apply Loop → double-click a landing step → pick a zone step → audition candidates → save a mirror.
+        </div>
+        <button id="dismiss-onboarding-button" class="ghost-button">Got it</button>
+      </section>
 
       <main class="layout">
         <section class="workspace-card workspace-main">
@@ -164,7 +173,9 @@
           <div id="compare-summary" class="compare-summary">
             <p class="summary-title">Current view</p>
             <p id="compare-summary-text">Start from a base loop, then store one focused change as a mirror.</p>
+            <p id="compare-axis-pill" class="compare-axis-pill hidden"></p>
             <p id="compare-provenance-text" class="compare-provenance hidden"></p>
+            <div id="mirror-detail-panel" class="mirror-detail-panel hidden"></div>
             <div class="compare-tools">
               <button id="flash-compare-button" class="ghost-button" disabled>Flash Compare</button>
               <button id="preview-diff-button" class="ghost-button" disabled>Play Diff</button>
@@ -198,7 +209,22 @@
             Shortcuts: Space play, 1/2/3 axis, S solo zone, B back to base, M new mirror, F flash compare, U undo, R redo, X reset draft
           </p>
           <div class="audition-memory">
-            <div class="summary-title">Audition Trail</div>
+            <div class="audition-head">
+              <div class="summary-title">Audition Trail</div>
+              <div id="audition-filter" class="tab-strip audition-filter">
+                <button class="tab-button active" data-filter="all">All</button>
+                <button class="tab-button" data-filter="pinned">Pinned</button>
+                <button class="tab-button" data-filter="promotable">Promotable</button>
+              </div>
+              <div class="audition-batch-actions">
+                <button id="pin-all-auditions-button" class="ghost-button">Pin Filtered</button>
+                <button id="unpin-all-auditions-button" class="ghost-button">Unpin All</button>
+                <label class="toggle compact-toggle">
+                  <span>Keep Notes</span>
+                  <input id="keep-notes-toggle" type="checkbox" />
+                </label>
+              </div>
+            </div>
             <div id="audition-trail" class="audition-trail">
               <p class="dock-copy">No audition history yet.</p>
             </div>
