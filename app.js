@@ -1,6 +1,9 @@
 (function () {
   const DEMO_LOOP = "Dm7 | G7 | Cmaj7 | A7";
   const STORAGE_KEY = "harmonic-orbit-mvp-session";
+  const ONBOARDING_KEY = "harmonic-orbit-mvp-onboarding-dismissed";
+  const AUDITION_FILTER_KEY = "harmonic-orbit-mvp-audition-filter";
+  const KEEP_NOTES_ON_UNPIN_KEY = "harmonic-orbit-mvp-keep-notes-on-unpin";
   const NOTES = {
     C: 60,
     "C#": 61,
@@ -50,6 +53,14 @@
     toastTimer: null,
     compareFlashTimers: [],
     compareFocusStepIndex: null,
+    auditionFilter: "all",
+    onboardingDismissed: false,
+    keepNotesOnUnpin: false,
+    favoriteMirrors: {},
+    stackOrders: {},
+    stackSelections: {},
+    stackCompareIncludeBase: {},
+    highlightedAuditionId: null,
   };
 
   const ui = {
@@ -61,6 +72,7 @@
     saveSessionButton: document.getElementById("save-session-button"),
     restoreSessionButton: document.getElementById("restore-session-button"),
     clearSessionButton: document.getElementById("clear-session-button"),
+    exportReviewButton: document.getElementById("export-review-button"),
     exportSessionButton: document.getElementById("export-session-button"),
     importSessionButton: document.getElementById("import-session-button"),
     importSessionInput: document.getElementById("import-session-input"),
@@ -91,6 +103,8 @@
     mirrorEmptyCopy: document.getElementById("mirror-empty-copy"),
     compareSummaryText: document.getElementById("compare-summary-text"),
     compareProvenanceText: document.getElementById("compare-provenance-text"),
+    compareAxisPill: document.getElementById("compare-axis-pill"),
+    mirrorDetailPanel: document.getElementById("mirror-detail-panel"),
     diffSummaryList: document.getElementById("diff-summary-list"),
     newMirrorButton: document.getElementById("new-mirror-button"),
     addSnapshotButton: document.getElementById("add-snapshot-button"),
@@ -108,6 +122,13 @@
     soloZoneButton: document.getElementById("solo-zone-button"),
     bypassEditsButton: document.getElementById("bypass-edits-button"),
     backToBaseButton: document.getElementById("back-to-base-button"),
+    currentModePill: document.getElementById("current-mode-pill"),
+    onboardingBanner: document.getElementById("onboarding-banner"),
+    dismissOnboardingButton: document.getElementById("dismiss-onboarding-button"),
+    auditionFilter: document.getElementById("audition-filter"),
+    pinAllAuditionsButton: document.getElementById("pin-all-auditions-button"),
+    unpinAllAuditionsButton: document.getElementById("unpin-all-auditions-button"),
+    keepNotesToggle: document.getElementById("keep-notes-toggle"),
     auditionTrail: document.getElementById("audition-trail"),
     mirrorDialog: document.getElementById("mirror-dialog"),
     mirrorDialogHelper: document.getElementById("mirror-dialog-helper"),
@@ -124,6 +145,7 @@
     ui.saveSessionButton.addEventListener("click", saveSession);
     ui.restoreSessionButton.addEventListener("click", restoreSession);
     ui.clearSessionButton.addEventListener("click", clearSavedSession);
+    ui.exportReviewButton.addEventListener("click", exportReview);
     ui.exportSessionButton.addEventListener("click", exportSession);
     ui.importSessionButton.addEventListener("click", triggerImportSession);
     ui.importSessionInput.addEventListener("change", importSessionFromFile);
@@ -151,10 +173,31 @@
     ui.confirmMirrorButton.addEventListener("click", createMirror);
     ui.mirrorDialog.addEventListener("close", onDialogClose);
     ui.mirrorList.addEventListener("click", onMirrorClick);
+    ui.dismissOnboardingButton.addEventListener("click", dismissOnboarding);
+    ui.auditionFilter.addEventListener("click", onAuditionFilterClick);
+    ui.pinAllAuditionsButton.addEventListener("click", pinFilteredAuditions);
+    ui.unpinAllAuditionsButton.addEventListener("click", unpinAllAuditions);
+    ui.keepNotesToggle.addEventListener("change", onKeepNotesToggleChange);
     document.addEventListener("keydown", onKeyDown);
+    applyControlHints();
+    state.onboardingDismissed = getStorageFlag(ONBOARDING_KEY);
+    state.auditionFilter = getStoredAuditionFilter();
+    state.keepNotesOnUnpin = getStorageFlag(KEEP_NOTES_ON_UNPIN_KEY);
     onLoopInput();
     syncSessionControls();
     render();
+  }
+
+  function applyControlHints() {
+    ui.playLoopButton.title = "Hear the current loop with current mode settings.";
+    ui.soloZoneButton.title = "Only audition the approach zone during playback.";
+    ui.bypassEditsButton.title = "Temporarily hear base loop while keeping edits.";
+    ui.backToBaseButton.title = "Return to Base mode for editing.";
+    ui.flashCompareButton.title = "Flash between base and compare target diffs.";
+    ui.previewDiffButton.title = "Play all diffs in sequence.";
+    ui.clearAuditionsButton.title = "Clear unpinned audition entries.";
+    ui.pinAllAuditionsButton.title = "Pin all visible audition entries under current filter.";
+    ui.unpinAllAuditionsButton.title = "Unpin every pinned audition entry.";
   }
 
   function loadDemo() {
@@ -398,6 +441,13 @@
       lastChange: state.lastChange ? { ...state.lastChange } : null,
       bypassEdits: state.bypassEdits,
       soloZone: state.soloZone,
+      auditionFilter: state.auditionFilter,
+      keepNotesOnUnpin: state.keepNotesOnUnpin,
+      favoriteMirrors: { ...state.favoriteMirrors },
+      stackOrders: { ...state.stackOrders },
+      stackSelections: Object.fromEntries(Object.entries(state.stackSelections).map(([k, v]) => [k, Array.isArray(v) ? [...v] : []])),
+      stackCompareIncludeBase: { ...state.stackCompareIncludeBase },
+      highlightedAuditionId: state.highlightedAuditionId,
     };
   }
 
@@ -413,6 +463,13 @@
     state.lastChange = snapshot.lastChange ? { ...snapshot.lastChange } : null;
     state.bypassEdits = Boolean(snapshot.bypassEdits);
     state.soloZone = Boolean(snapshot.soloZone);
+    state.auditionFilter = isValidAuditionFilter(snapshot.auditionFilter) ? snapshot.auditionFilter : state.auditionFilter;
+    state.keepNotesOnUnpin = typeof snapshot.keepNotesOnUnpin === "boolean" ? snapshot.keepNotesOnUnpin : state.keepNotesOnUnpin;
+    state.favoriteMirrors = snapshot.favoriteMirrors && typeof snapshot.favoriteMirrors === "object" ? { ...snapshot.favoriteMirrors } : {};
+    state.stackOrders = snapshot.stackOrders && typeof snapshot.stackOrders === "object" ? { ...snapshot.stackOrders } : {};
+    state.stackSelections = snapshot.stackSelections && typeof snapshot.stackSelections === "object" ? Object.fromEntries(Object.entries(snapshot.stackSelections).map(([k,v]) => [k, Array.isArray(v) ? [...v] : []])) : {};
+    state.stackCompareIncludeBase = snapshot.stackCompareIncludeBase && typeof snapshot.stackCompareIncludeBase === "object" ? { ...snapshot.stackCompareIncludeBase } : {};
+    state.highlightedAuditionId = snapshot.highlightedAuditionId || null;
     updateRoles(state.currentSteps);
   }
 
@@ -852,6 +909,7 @@
       steps: cloneSteps(steps),
       lastChange: lastChange ? { ...lastChange } : null,
       provenance,
+      createdAt: Date.now(),
     };
   }
 
@@ -1146,8 +1204,60 @@
     renderInspector();
     renderMirrors();
     renderTransport();
+    renderCurrentMode();
+    renderOnboarding();
     renderAuditionTrail();
     renderSnapshots();
+  }
+
+  function renderCurrentMode() {
+    const compareTarget = getCompareTarget();
+    let label = "Base";
+    if (state.bypassEdits) {
+      label = "Bypass (Base)";
+    } else if (compareTarget?.kind === "draft") {
+      label = "Draft";
+    } else if (compareTarget?.kind === "mirror") {
+      label = `${compareTarget.axis} Mirror`;
+    }
+    ui.currentModePill.textContent = `Mode: ${label}`;
+  }
+
+  function renderOnboarding() {
+    const shouldShow = !state.onboardingDismissed && !state.baseSteps.length;
+    ui.onboardingBanner.classList.toggle("hidden", !shouldShow);
+  }
+
+  function dismissOnboarding() {
+    state.onboardingDismissed = true;
+    setStorageFlag(ONBOARDING_KEY, true);
+    render();
+  }
+
+  function onKeepNotesToggleChange() {
+    state.keepNotesOnUnpin = ui.keepNotesToggle.checked;
+    setStorageFlag(KEEP_NOTES_ON_UNPIN_KEY, state.keepNotesOnUnpin);
+    persistSession();
+    state.sessionMessage = state.keepNotesOnUnpin
+      ? "Unpin now keeps audition notes."
+      : "Unpin now clears audition notes.";
+    renderSessionFeedback();
+  }
+
+  function onAuditionFilterClick(event) {
+    const button = event.target.closest(".tab-button");
+    if (!button) {
+      return;
+    }
+    const next = button.dataset.filter;
+    if (!next || next === state.auditionFilter) {
+      return;
+    }
+    state.auditionFilter = next;
+    state.highlightedAuditionId = null;
+    setStorageValue(AUDITION_FILTER_KEY, next);
+    persistSession();
+    renderAuditionTrail();
   }
 
   function renderOrbit(steps) {
@@ -1363,10 +1473,10 @@
           <p class="candidate-impact-note">${impact.nuance}</p>
         </div>
         <div class="button-row">
-          <button class="ghost-button" data-action="preview">Play Cand.</button>
-          <button class="ghost-button" data-action="compare">Before/After</button>
-          <button class="ghost-button" data-action="context">To Landing</button>
-          <button class="primary-button" data-action="apply">Apply</button>
+          <button class="ghost-button" data-action="preview">Hear Candidate</button>
+          <button class="ghost-button" data-action="compare">A/B Move</button>
+          <button class="ghost-button" data-action="context">Hear Resolve</button>
+          <button class="primary-button" data-action="apply">Use This Move</button>
         </div>
       `;
 
@@ -1515,8 +1625,9 @@
     buildMirrorGroups().forEach((group) => {
       const section = document.createElement("section");
       section.className = "mirror-group";
+      section.dataset.groupKey = group.key;
       const displayTitle = state.stackLabels[group.key] || group.title;
-      const displaySubtitle = state.stackLabels[group.key] ? `${group.title} · ${group.subtitle}` : group.subtitle;
+      const displaySubtitle = state.stackLabels[group.key] ? `${group.title} · ${group.subtitle}` : `${group.subtitle} · unlabeled`;
       const stackNote = state.stackNotes[group.key] || "";
       section.innerHTML = `
         <div class="mirror-group-title">
@@ -1525,43 +1636,143 @@
             <span>${displaySubtitle}</span>
           </div>
         </div>
-        ${stackNote ? `<p class="mirror-group-note">${stackNote}</p>` : ""}
+        ${stackNote ? `<p class="mirror-group-note">${stackNote}</p>` : `<p class="mirror-group-note muted">No stack note yet.</p>`}
       `;
+
+      const orderedMirrors = getOrderedMirrorsForGroup(group);
+      ensureStackSelection(group.key, orderedMirrors.map((mirror) => mirror.id));
+      if (!(group.key in state.stackCompareIncludeBase)) {
+        state.stackCompareIncludeBase[group.key] = true;
+      }
+
       const header = section.querySelector(".mirror-group-title");
       const labelButton = document.createElement("button");
       labelButton.className = "ghost-button";
       labelButton.textContent = state.stackLabels[group.key] ? "Edit Label" : "Label Stack";
+      labelButton.title = "Name this stack for faster recall";
       labelButton.addEventListener("click", () => editMirrorStackLabel(group));
+
       const noteButton = document.createElement("button");
       noteButton.className = "ghost-button";
       noteButton.textContent = stackNote ? "Edit Note" : "Add Note";
+      noteButton.title = "Store a one-line musical intent note";
       noteButton.addEventListener("click", () => editMirrorStackNote(group));
+
       const groupPreviewButton = document.createElement("button");
       groupPreviewButton.className = "ghost-button";
       groupPreviewButton.textContent = "Cycle Stack";
-      groupPreviewButton.disabled = group.mirrors.length < 2;
+      groupPreviewButton.disabled = orderedMirrors.length < 2;
       groupPreviewButton.addEventListener("click", () => previewMirrorStack(group));
+
+      const compareSelectedButton = document.createElement("button");
+      compareSelectedButton.className = "ghost-button";
+      compareSelectedButton.textContent = "Compare Selected";
+      compareSelectedButton.title = "Audition only selected mirrors, optional Base reference.";
+      compareSelectedButton.disabled = getSelectedMirrorsForGroup(group).length < 1;
+      compareSelectedButton.addEventListener("click", () => previewSelectedMirrorStack(group));
+
+      const selectAllButton = document.createElement("button");
+      selectAllButton.className = "ghost-button";
+      selectAllButton.textContent = "Select All";
+      selectAllButton.title = "Select all mirrors in this stack for compare-selected.";
+      selectAllButton.addEventListener("click", () => selectAllMirrorsInGroup(group));
+
+      const clearSelectionButton = document.createElement("button");
+      clearSelectionButton.className = "ghost-button";
+      clearSelectionButton.textContent = "Clear Selection";
+      clearSelectionButton.title = "Clear all selected mirrors in this stack.";
+      clearSelectionButton.addEventListener("click", () => clearMirrorSelectionInGroup(group));
+
+      const includeBaseToggle = document.createElement("label");
+      includeBaseToggle.className = "toggle compact-toggle";
+      includeBaseToggle.innerHTML = `<span>Include Base</span><input type="checkbox" ${state.stackCompareIncludeBase[group.key] ? "checked" : ""} />`;
+      const includeBaseInput = includeBaseToggle.querySelector('input');
+      includeBaseInput.addEventListener("change", () => {
+        state.stackCompareIncludeBase[group.key] = includeBaseInput.checked;
+        persistSession();
+      });
+
       const titleActions = document.createElement("div");
       titleActions.className = "mirror-group-actions";
       titleActions.appendChild(labelButton);
       titleActions.appendChild(noteButton);
       titleActions.appendChild(groupPreviewButton);
+      titleActions.appendChild(compareSelectedButton);
+      titleActions.appendChild(selectAllButton);
+      titleActions.appendChild(clearSelectionButton);
+      titleActions.appendChild(includeBaseToggle);
       header.appendChild(titleActions);
+
       const row = document.createElement("div");
       row.className = "mirror-group-row";
 
-      group.mirrors.forEach((mirror) => {
+      orderedMirrors.forEach((mirror, index) => {
+        const entry = document.createElement("div");
+        entry.className = "mirror-entry";
+
+        const select = document.createElement("input");
+        select.type = "checkbox";
+        select.className = "mirror-select";
+        select.checked = (state.stackSelections[group.key] || []).includes(mirror.id);
+        select.title = "Select for stack compare";
+        select.addEventListener("change", () => {
+          const current = new Set(state.stackSelections[group.key] || []);
+          if (select.checked) current.add(mirror.id); else current.delete(mirror.id);
+          state.stackSelections[group.key] = Array.from(current);
+          persistSession();
+          render();
+        });
+
         const chip = document.createElement("button");
-        chip.className = "mirror-chip";
+        chip.className = `mirror-chip mirror-${mirror.axis.toLowerCase()}`;
         chip.dataset.variantId = mirror.id;
-        chip.textContent = `${mirror.axis}: ${mirror.name}`;
+        chip.textContent = `${state.favoriteMirrors[mirror.id] ? "★ " : ""}${mirror.axis}: ${mirror.name}`;
         if (mirror.provenance?.label) {
           chip.title = mirror.provenance.label;
         }
         if (state.activeVariantId === mirror.id) {
           chip.classList.add("active");
         }
-        row.appendChild(chip);
+
+        const controls = document.createElement("div");
+        controls.className = "mirror-entry-controls";
+
+        const favButton = document.createElement("button");
+        favButton.className = "ghost-button mini";
+        favButton.textContent = state.favoriteMirrors[mirror.id] ? "★" : "☆";
+        favButton.title = "Favorite this mirror (promote to front in stack).";
+        favButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          toggleFavoriteMirror(mirror.id);
+        });
+
+        const leftButton = document.createElement("button");
+        leftButton.className = "ghost-button mini";
+        leftButton.textContent = "←";
+        leftButton.disabled = index === 0;
+        leftButton.title = "Move left in stack order";
+        leftButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          reorderMirrorInStack(group.key, mirror.id, -1);
+        });
+
+        const rightButton = document.createElement("button");
+        rightButton.className = "ghost-button mini";
+        rightButton.textContent = "→";
+        rightButton.disabled = index === orderedMirrors.length - 1;
+        rightButton.title = "Move right in stack order";
+        rightButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          reorderMirrorInStack(group.key, mirror.id, 1);
+        });
+
+        controls.appendChild(favButton);
+        controls.appendChild(leftButton);
+        controls.appendChild(rightButton);
+        entry.appendChild(select);
+        entry.appendChild(chip);
+        entry.appendChild(controls);
+        row.appendChild(entry);
       });
 
       section.appendChild(row);
@@ -1572,13 +1783,20 @@
     const compareTarget = getCompareTarget();
     const diffItems = getActiveDiffItems(compareTarget);
     if (compareTarget?.kind === "mirror") {
-      ui.compareSummaryText.textContent = `Editing: ${compareTarget.axis} mirror. ${diffItems.length} diff step(s) from base.`;
+      ui.compareSummaryText.textContent = `Listening to ${compareTarget.axis} mirror with ${diffItems.length} changed step(s).`;
+      ui.compareAxisPill.textContent = `${compareTarget.axis} mirror`;
+      ui.compareAxisPill.className = `compare-axis-pill axis-${compareTarget.axis.toLowerCase()}`;
     } else if (compareTarget?.kind === "draft") {
-      ui.compareSummaryText.textContent = `Current draft has ${diffItems.length} pending diff step(s) from base.`;
+      ui.compareSummaryText.textContent = `Current draft has ${diffItems.length} pending color moves from base.`;
+      ui.compareAxisPill.textContent = "Draft";
+      ui.compareAxisPill.className = "compare-axis-pill axis-draft";
     } else {
       ui.compareSummaryText.textContent = "Start from a base loop, then store one focused change as a mirror.";
+      ui.compareAxisPill.textContent = "";
+      ui.compareAxisPill.className = "compare-axis-pill hidden";
     }
     renderCompareProvenance(compareTarget);
+    renderMirrorDetail(compareTarget);
 
     ui.newMirrorButton.disabled = !(state.lastChange && state.activeVariantId === "base" && !state.bypassEdits);
     ui.flashCompareButton.disabled = !compareTarget || !diffItems.length;
@@ -1587,6 +1805,154 @@
     ui.renameMirrorButton.disabled = !(compareTarget?.kind === "mirror");
     ui.deleteMirrorButton.disabled = !(compareTarget?.kind === "mirror");
     renderDiffSummary(diffItems);
+  }
+
+  function getOrderedMirrorsForGroup(group) {
+    const mirrors = [...group.mirrors];
+    const order = Array.isArray(state.stackOrders[group.key]) ? state.stackOrders[group.key] : [];
+    const orderMap = new Map(order.map((id, index) => [id, index]));
+    mirrors.sort((left, right) => {
+      const leftFavorite = state.favoriteMirrors[left.id] ? 0 : 1;
+      const rightFavorite = state.favoriteMirrors[right.id] ? 0 : 1;
+      if (leftFavorite !== rightFavorite) {
+        return leftFavorite - rightFavorite;
+      }
+      const leftOrder = orderMap.has(left.id) ? orderMap.get(left.id) : 999;
+      const rightOrder = orderMap.has(right.id) ? orderMap.get(right.id) : 999;
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+      return (left.createdAt || 0) - (right.createdAt || 0);
+    });
+    return mirrors;
+  }
+
+  function ensureStackSelection(groupKey, mirrorIds) {
+    const current = new Set(state.stackSelections[groupKey] || []);
+    const valid = mirrorIds.filter((id) => current.has(id));
+    state.stackSelections[groupKey] = valid.length ? valid : [...mirrorIds];
+  }
+
+  function getSelectedMirrorsForGroup(group) {
+    const ordered = getOrderedMirrorsForGroup(group);
+    const selected = new Set(state.stackSelections[group.key] || []);
+    return ordered.filter((mirror) => selected.has(mirror.id));
+  }
+
+  function selectAllMirrorsInGroup(group) {
+    const ordered = getOrderedMirrorsForGroup(group).map((mirror) => mirror.id);
+    if (!ordered.length) {
+      return;
+    }
+    state.stackSelections[group.key] = ordered;
+    state.sessionMessage = `Selected all ${ordered.length} mirror(s) in ${group.title}.`;
+    persistSession();
+    render();
+  }
+
+  function clearMirrorSelectionInGroup(group) {
+    state.stackSelections[group.key] = [];
+    state.sessionMessage = `Cleared selection for ${group.title}.`;
+    persistSession();
+    render();
+  }
+
+  function toggleFavoriteMirror(mirrorId) {
+    pushHistory("favorite mirror");
+    state.favoriteMirrors[mirrorId] = !state.favoriteMirrors[mirrorId];
+    state.sessionMessage = state.favoriteMirrors[mirrorId] ? "Mirror marked as favorite." : "Mirror removed from favorites.";
+    persistSession();
+    render();
+  }
+
+  function reorderMirrorInStack(groupKey, mirrorId, direction) {
+    const group = buildMirrorGroups().find((item) => item.key === groupKey);
+    if (!group) {
+      return;
+    }
+    const ordered = getOrderedMirrorsForGroup(group).map((mirror) => mirror.id);
+    const index = ordered.indexOf(mirrorId);
+    const nextIndex = index + direction;
+    if (index === -1 || nextIndex < 0 || nextIndex >= ordered.length) {
+      return;
+    }
+    [ordered[index], ordered[nextIndex]] = [ordered[nextIndex], ordered[index]];
+    pushHistory("reorder stack");
+    state.stackOrders[groupKey] = ordered;
+    state.sessionMessage = "Stack order updated.";
+    persistSession();
+    render();
+  }
+
+  function previewSelectedMirrorStack(group) {
+    const selectedMirrors = getSelectedMirrorsForGroup(group);
+    if (!selectedMirrors.length) {
+      return;
+    }
+    const includeBase = Boolean(state.stackCompareIncludeBase[group.key]);
+    const focusStepIndex = group.stepIndex !== 999 ? group.stepIndex : (selectedMirrors[0].lastChange?.stepIndex ?? state.landingIndex ?? 0);
+    const frames = [];
+    let offset = 0;
+
+    if (includeBase) {
+      const baseSymbol = state.baseSteps[focusStepIndex]?.symbol;
+      if (baseSymbol) {
+        frames.push({ at: offset, focusIndex: focusStepIndex, symbol: baseSymbol });
+        offset += 360;
+      }
+    }
+
+    selectedMirrors.forEach((mirror) => {
+      const symbol = mirror.steps[focusStepIndex]?.symbol;
+      if (symbol) {
+        frames.push({ at: offset, focusIndex: focusStepIndex, symbol });
+        offset += 360;
+      }
+    });
+
+    runAuditionSequence(frames, {
+      label: "Stack Selected Compare",
+      detail: `${group.title} selected ${selectedMirrors.length} mirror(s)${includeBase ? " + base" : ""}.`,
+      record: true,
+    });
+  }
+
+  function renderMirrorDetail(compareTarget) {
+    if (compareTarget?.kind !== "mirror") {
+      ui.mirrorDetailPanel.classList.add("hidden");
+      ui.mirrorDetailPanel.innerHTML = "";
+      return;
+    }
+
+    const mirror = state.mirrors.find((item) => item.id === compareTarget.id);
+    if (!mirror) {
+      ui.mirrorDetailPanel.classList.add("hidden");
+      ui.mirrorDetailPanel.innerHTML = "";
+      return;
+    }
+
+    const stackInfo = getMirrorStackInfo(mirror);
+    const stackLabel = state.stackLabels[stackInfo.key] || stackInfo.title;
+    const lastChange = mirror.lastChange
+      ? `Step ${mirror.lastChange.stepIndex + 1}: ${mirror.lastChange.before || "-"} → ${mirror.lastChange.after || "-"}`
+      : "No step diff metadata.";
+    const sourceEntry = mirror.provenance?.auditionId
+      ? state.auditionTrail.find((entry) => entry.id === mirror.provenance.auditionId)
+      : null;
+    const sourcePinned = sourceEntry ? (sourceEntry.pinned ? "pinned" : "unpinned") : "n/a";
+    ui.mirrorDetailPanel.innerHTML = `
+      <p><strong>Mirror Detail</strong></p>
+      <p>Stack: ${stackLabel}</p>
+      <p>Last change: ${lastChange}</p>
+      <p>Source: ${mirror.provenance?.label || "Saved from draft"}</p>
+      ${sourceEntry ? `<p>Source audition: ${sourceEntry.label} (${sourcePinned})</p>` : ""}
+      ${sourceEntry ? `<button class="ghost-button mini" data-action="jump-source">Jump to Source Audition</button>` : ""}
+    `;
+    if (sourceEntry) {
+      const jumpButton = ui.mirrorDetailPanel.querySelector('[data-action="jump-source"]');
+      jumpButton?.addEventListener("click", () => jumpToSourceAudition(sourceEntry.id));
+    }
+    ui.mirrorDetailPanel.classList.remove("hidden");
   }
 
   function buildMirrorGroups() {
@@ -1740,11 +2106,12 @@
     const mirror = state.mirrors.find((item) => item.id === compareTarget.id);
     const provenance = mirror?.provenance?.label;
     if (!provenance) {
-      ui.compareProvenanceText.classList.add("hidden");
-      ui.compareProvenanceText.textContent = "";
+      ui.compareProvenanceText.classList.remove("hidden");
+      ui.compareProvenanceText.textContent = "Provenance: none yet (saved directly from draft).";
       return;
     }
     ui.compareProvenanceText.textContent = provenance;
+    ui.compareProvenanceText.title = "Where this mirror came from";
     ui.compareProvenanceText.classList.remove("hidden");
   }
 
@@ -1921,27 +2288,76 @@
     const hasLoop = state.baseSteps.length > 0;
     const hasLanding = state.landingIndex !== null;
     ui.playLoopButton.disabled = !hasLoop || !ui.loopToggle.checked;
-    ui.playLoopButton.textContent = state.isPlaying ? "Pause" : "Play Loop";
+    ui.playLoopButton.textContent = state.isPlaying ? "Pause" : "Hear Loop";
     ui.soloZoneButton.disabled = !hasLanding;
     ui.bypassEditsButton.disabled = !hasLoop;
     ui.backToBaseButton.disabled = state.activeVariantId === "base";
     ui.clearAuditionsButton.disabled = !state.auditionTrail.some((entry) => !entry.pinned);
+    ui.pinAllAuditionsButton.disabled = !getFilteredAuditionTrail().some((entry) => !entry.pinned);
+    ui.unpinAllAuditionsButton.disabled = !state.auditionTrail.some((entry) => entry.pinned);
     ui.soloZoneButton.className = state.soloZone ? "primary-button" : "ghost-button";
     ui.bypassEditsButton.className = state.bypassEdits ? "primary-button" : "ghost-button";
+    ui.soloZoneButton.textContent = state.soloZone ? "Zone Focus: On" : "Zone Focus";
+    ui.bypassEditsButton.textContent = state.bypassEdits ? "Ignore Edits: On" : "Ignore Edits";
+    ui.backToBaseButton.textContent = "Return to Base";
+    ui.keepNotesToggle.checked = state.keepNotesOnUnpin;
+  }
+
+  function jumpToSourceAudition(entryId) {
+    if (!entryId) {
+      return;
+    }
+    const target = state.auditionTrail.find((entry) => entry.id === entryId);
+    if (!target) {
+      state.sessionMessage = "Source audition is no longer in the trail.";
+      renderSessionFeedback();
+      return;
+    }
+
+    state.auditionFilter = "all";
+    setStorageValue(AUDITION_FILTER_KEY, "all");
+    state.highlightedAuditionId = entryId;
+    render();
+
+    window.requestAnimationFrame(() => {
+      const node = ui.auditionTrail.querySelector(`[data-audition-id="${entryId}"]`);
+      if (node) {
+        node.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+
+    state.sessionMessage = `Jumped to source audition: ${target.label}.`;
+    renderSessionFeedback();
+    showToast("Source audition focused");
   }
 
   function renderAuditionTrail() {
     ui.auditionTrail.innerHTML = "";
-    if (!state.auditionTrail.length) {
-      ui.auditionTrail.innerHTML = '<p class="dock-copy">No audition history yet.</p>';
+    Array.from(ui.auditionFilter.querySelectorAll(".tab-button")).forEach((button) => {
+      button.classList.toggle("active", button.dataset.filter === state.auditionFilter);
+    });
+
+    const filteredEntries = getFilteredAuditionTrail();
+    if (!filteredEntries.length) {
+      const emptyCopy =
+        state.auditionFilter === "pinned"
+          ? "No pinned auditions yet."
+          : state.auditionFilter === "promotable"
+            ? "No promotable auditions yet."
+            : "No audition history yet.";
+      ui.auditionTrail.innerHTML = `<p class="dock-copy">${emptyCopy}</p>`;
       return;
     }
 
-    getSortedAuditionTrail().forEach((entry) => {
+    filteredEntries.forEach((entry) => {
       const item = document.createElement("div");
       item.className = "audition-item";
+      item.dataset.auditionId = entry.id;
       if (entry.pinned) {
         item.classList.add("pinned");
+      }
+      if (state.highlightedAuditionId === entry.id) {
+        item.classList.add("source-highlight");
       }
       const pinMarkup = entry.pinned ? '<span class="pin-badge">Pinned</span>' : "";
       item.innerHTML = `
@@ -1951,6 +2367,7 @@
             ${pinMarkup}
           </div>
           <span>${entry.detail}</span>
+          <span class="audition-age">${formatRelativeAge(entry.createdAt)}</span>
           ${entry.note ? `<p class="audition-note">${entry.note}</p>` : ""}
         </div>
       `;
@@ -1983,6 +2400,44 @@
     });
   }
 
+  function pinFilteredAuditions() {
+    const candidates = getFilteredAuditionTrail().filter((entry) => !entry.pinned);
+    if (!candidates.length) {
+      return;
+    }
+    candidates.forEach((entry) => {
+      entry.pinned = true;
+      entry.pinnedAt = Date.now();
+    });
+    state.sessionMessage = `Pinned ${candidates.length} audition(s).`;
+    persistSession();
+    render();
+    showToast("Filtered auditions pinned");
+  }
+
+  function unpinAllAuditions() {
+    const pinned = state.auditionTrail.filter((entry) => entry.pinned);
+    if (!pinned.length) {
+      return;
+    }
+    const confirmed = window.confirm(`Unpin ${pinned.length} pinned audition(s)?${state.keepNotesOnUnpin ? " Notes will be kept." : " Notes will be cleared."}`);
+    if (!confirmed) {
+      return;
+    }
+    pinned.forEach((entry) => {
+      entry.pinned = false;
+      delete entry.pinnedAt;
+      if (!state.keepNotesOnUnpin) {
+        entry.note = "";
+      }
+    });
+    state.sessionMessage = `Unpinned ${pinned.length} audition(s).`;
+    trimAuditionTrail();
+    persistSession();
+    render();
+    showToast("All auditions unpinned");
+  }
+
   function getSortedAuditionTrail() {
     return [...state.auditionTrail].sort((left, right) => {
       if (left.pinned !== right.pinned) {
@@ -1990,6 +2445,31 @@
       }
       return (right.createdAt || 0) - (left.createdAt || 0);
     });
+  }
+
+  function getFilteredAuditionTrail() {
+    const entries = getSortedAuditionTrail();
+    if (state.auditionFilter === "pinned") {
+      return entries.filter((entry) => entry.pinned);
+    }
+    if (state.auditionFilter === "promotable") {
+      return entries.filter((entry) => entry.pinned && entry.promote);
+    }
+    return entries;
+  }
+
+  function formatRelativeAge(timestamp) {
+    if (!timestamp) {
+      return "just now";
+    }
+    const diffMs = Math.max(0, Date.now() - Number(timestamp));
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
   }
 
   function renderSnapshots() {
@@ -2096,6 +2576,10 @@
     if (!state.auditionTrail.some((entry) => !entry.pinned)) {
       return;
     }
+    const confirmed = window.confirm("Clear all unpinned auditions?");
+    if (!confirmed) {
+      return;
+    }
     state.auditionTrail = state.auditionTrail.filter((entry) => entry.pinned);
     state.sessionMessage = "Unpinned auditions cleared.";
     persistSession();
@@ -2123,9 +2607,12 @@
       showToast("Audition pinned");
     } else {
       delete entry.pinnedAt;
-      entry.note = "";
-      state.sessionMessage = `Unpinned audition: ${entry.label}.`;
-      showToast("Audition unpinned");
+      if (!state.keepNotesOnUnpin) {
+        entry.note = "";
+      }
+      const noteBehavior = state.keepNotesOnUnpin ? "notes kept" : "notes cleared";
+      state.sessionMessage = `Unpinned audition: ${entry.label} (${noteBehavior}).`;
+      showToast(`Audition unpinned (${noteBehavior})`);
     }
     trimAuditionTrail();
     persistSession();
@@ -2425,6 +2912,71 @@
     showToast("Saved session cleared");
   }
 
+  function exportReview() {
+    if (!state.baseSteps.length) {
+      state.sessionMessage = "Load a loop before exporting review.";
+      render();
+      return;
+    }
+
+    const lines = [];
+    lines.push("# Harmonic Orbit Review");
+    lines.push(`Generated: ${new Date().toLocaleString()}`);
+    lines.push("");
+    lines.push(`Loop: ${state.loopInput || "(unknown)"}`);
+    lines.push("");
+
+    const pinned = state.auditionTrail.filter((entry) => entry.pinned);
+    lines.push(`## Pinned Auditions (${pinned.length})`);
+    if (!pinned.length) {
+      lines.push("- None");
+    } else {
+      pinned.forEach((entry) => {
+        lines.push(`- ${entry.label} · ${entry.detail}${entry.note ? ` · Note: ${entry.note}` : ""}`);
+      });
+    }
+
+    lines.push("");
+    lines.push(`## Mirrors (${state.mirrors.length})`);
+    if (!state.mirrors.length) {
+      lines.push("- None");
+    } else {
+      state.mirrors.forEach((mirror) => {
+        lines.push(`- ${mirror.axis}: ${mirror.name}${mirror.provenance?.label ? ` · ${mirror.provenance.label}` : ""}`);
+      });
+    }
+
+    lines.push("");
+    lines.push("## Stack Labels & Notes");
+    const groups = buildMirrorGroups();
+    if (!groups.length) {
+      lines.push("- None");
+    } else {
+      groups.forEach((group) => {
+        const label = state.stackLabels[group.key] || "(unlabeled)";
+        const note = state.stackNotes[group.key] || "(no note)";
+        lines.push(`- ${group.title}: ${label} / ${note}`);
+      });
+    }
+
+    downloadTextFile("harmonic-orbit-review.md", lines.join("\n"));
+    state.sessionMessage = "Review exported as Markdown.";
+    render();
+    showToast("Review exported");
+  }
+
+  function downloadTextFile(filename, content) {
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   function exportSession() {
     if (!state.baseSteps.length) {
       state.sessionMessage = "Nothing to export yet.";
@@ -2506,11 +3058,51 @@
     }
   }
 
+  function getStorageFlag(key) {
+    const storage = getStorage();
+    return !!(storage && storage.getItem(key) === "1");
+  }
+
+  function setStorageFlag(key, value) {
+    const storage = getStorage();
+    if (!storage) {
+      return;
+    }
+    if (value) {
+      storage.setItem(key, "1");
+    } else {
+      storage.removeItem(key);
+    }
+  }
+
+  function setStorageValue(key, value) {
+    const storage = getStorage();
+    if (!storage) {
+      return;
+    }
+    if (value === null || value === undefined || value === "") {
+      storage.removeItem(key);
+      return;
+    }
+    storage.setItem(key, String(value));
+  }
+
+  function getStoredAuditionFilter() {
+    const storage = getStorage();
+    const raw = storage ? storage.getItem(AUDITION_FILTER_KEY) : null;
+    return isValidAuditionFilter(raw) ? raw : "all";
+  }
+
+  function isValidAuditionFilter(value) {
+    return value === "all" || value === "pinned" || value === "promotable";
+  }
+
   function syncSessionControls() {
     const storage = getStorage();
     const hasSaved = !!(storage && storage.getItem(STORAGE_KEY));
     ui.restoreSessionButton.disabled = !hasSaved;
     ui.clearSessionButton.disabled = !hasSaved;
+    ui.exportReviewButton.disabled = !state.baseSteps.length;
     ui.exportSessionButton.disabled = !state.baseSteps.length;
   }
 
@@ -2532,6 +3124,13 @@
       lastChange: state.lastChange,
       bypassEdits: state.bypassEdits,
       soloZone: state.soloZone,
+      auditionFilter: state.auditionFilter,
+      keepNotesOnUnpin: state.keepNotesOnUnpin,
+      favoriteMirrors: { ...state.favoriteMirrors },
+      stackOrders: { ...state.stackOrders },
+      stackSelections: Object.fromEntries(Object.entries(state.stackSelections).map(([k, v]) => [k, Array.isArray(v) ? [...v] : []])),
+      stackCompareIncludeBase: { ...state.stackCompareIncludeBase },
+      highlightedAuditionId: state.highlightedAuditionId,
     };
   }
 
@@ -2556,6 +3155,7 @@
           ...mirror,
           steps: cloneSteps(mirror.steps || []),
           lastChange: mirror.lastChange || null,
+          createdAt: mirror.createdAt || Date.now(),
         }))
       : [];
     state.stackLabels = data.stackLabels && typeof data.stackLabels === "object"
@@ -2591,6 +3191,15 @@
     state.lastChange = data.lastChange || null;
     state.bypassEdits = Boolean(data.bypassEdits);
     state.soloZone = Boolean(data.soloZone);
+    state.auditionFilter = isValidAuditionFilter(data.auditionFilter) ? data.auditionFilter : getStoredAuditionFilter();
+    setStorageValue(AUDITION_FILTER_KEY, state.auditionFilter);
+    state.keepNotesOnUnpin = typeof data.keepNotesOnUnpin === "boolean" ? data.keepNotesOnUnpin : getStorageFlag(KEEP_NOTES_ON_UNPIN_KEY);
+    setStorageFlag(KEEP_NOTES_ON_UNPIN_KEY, state.keepNotesOnUnpin);
+    state.favoriteMirrors = data.favoriteMirrors && typeof data.favoriteMirrors === "object" ? { ...data.favoriteMirrors } : {};
+    state.stackOrders = data.stackOrders && typeof data.stackOrders === "object" ? { ...data.stackOrders } : {};
+    state.stackSelections = data.stackSelections && typeof data.stackSelections === "object" ? Object.fromEntries(Object.entries(data.stackSelections).map(([k,v]) => [k, Array.isArray(v) ? [...v] : []])) : {};
+    state.stackCompareIncludeBase = data.stackCompareIncludeBase && typeof data.stackCompareIncludeBase === "object" ? { ...data.stackCompareIncludeBase } : {};
+    state.highlightedAuditionId = data.highlightedAuditionId || null;
     state.sessionMessage = successMessage;
     stopPlayback();
     updateRoles(state.currentSteps);
